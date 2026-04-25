@@ -2,7 +2,6 @@
 
 Build your own competitive chess engine over 6–8 weeks! This project takes you from **game theory fundamentals** through **classical AI search** all the way to **neural network evaluation (NNUE)** — the same technology powering engines like Stockfish.
 
-> 🎯 Final showdown: Engine-vs-Engine tournament with a **prize** for the winner!
 
 ---
 
