@@ -74,33 +74,34 @@ class History:
         return board
 
     def is_win(self):
-        # check if the board position is a win for either players
-        # Feel free to implement this in anyway if needed
-        pass
+        for a, b, c in WINNING_LINES:
+            if self.board[a] != '0' and self.board[a] == self.board[b] == self.board[c]:
+                return self.board[a]
+        return False
 
     def is_draw(self):
-        # check if the board position is a draw
-        # Feel free to implement this in anyway if needed
-        pass
-
+         return (not self.is_win()) and all(sq != '0' for sq in self.board)
     def get_valid_actions(self):
-        # get the empty squares from the board
-        # Feel free to implement this in anyway if needed
-        pass
+        return [i for i, sq in enumerate(self.board) if sq == '0']
 
     def is_terminal_history(self):
-        # check if the history is a terminal history
-        # Feel free to implement this in anyway if needed
-        pass
+        """Terminal if someone has won or the board is full."""
+        return bool(self.is_win()) or all(sq != '0' for sq in self.board)
 
     def get_utility_given_terminal_history(self):
-        # Feel free to implement this in anyway if needed
-        pass
+        """Utility from x's perspective: +1 if x wins, -1 if o wins, 0 for draw."""
+        winner = self.is_win()
+        if winner == 'x':
+            return 1
+        elif winner == 'o':
+            return -1
+        else:
+            return 0
 
     def update_history(self, action):
-        # In case you need to create a deepcopy and update the history obj to get the next history object.
-        # Feel free to implement this in anyway if needed
-        pass
+        """Return a new History object with `action` appended (does not mutate self)."""
+        new_history = self.history + [action]
+        return History(new_history)
 
 
 def backward_induction(history_obj):
@@ -109,21 +110,42 @@ def backward_induction(history_obj):
     :return: best achievable utility (float) for th current history_obj
     """
     global strategy_dict_x, strategy_dict_o
-    # TODO implement
-    # (1) Implement backward induction for tictactoe
-    # (2) Update the global variables strategy_dict_x or strategy_dict_o which are a mapping from histories to
-    # probability distribution over actions.
-    # (2a)These are dictionary with keys as string representation of the history list e.g. if the history list of the
-    # history_obj is [0, 4, 2, 5], then the key is "0425". Each value is in turn a dictionary with keys as actions 0-8
-    # (str "0", "1", ..., "8") and each value of this dictionary is a float (representing the probability of
-    # choosing that action). Example: {”0452”: {”0”: 0, ”1”: 0, ”2”: 0, ”3”: 0, ”4”: 0, ”5”: 0, ”6”: 1, ”7”: 0, ”8”:
-    # 0}}
-    # (2b) Note, the strategy for each history in strategy_dict_x and strategy_dict_o is probability distribution over
-    # actions. But since tictactoe is a PIEFG, there always exists an optimal deterministic strategy (SPNE). So your
-    # policy will be something like this {"0": 1, "1": 0, "2": 0, "3": 0, "4": 0, "5": 0, "6": 0, "7": 0, "8": 0} where
-    # "0" was the one of the best actions for the current player/history.
-    return -2
-    # TODO implement
+    if history_obj.is_terminal_history():
+        return history_obj.get_utility_given_terminal_history()
+ 
+    history_key = ''.join(str(a) for a in history_obj.history)
+    valid_actions = history_obj.get_valid_actions()
+    player = history_obj.player
+    best_action = valid_actions[0]
+ 
+    if player == 'x':
+        # Maximizer
+        best_value = -math.inf
+        for action in valid_actions:
+            child = history_obj.update_history(action)
+            value = backward_induction(child, alpha, beta)
+            if value > best_value:
+                best_value = value
+                best_action = action
+            alpha = max(alpha, best_value)
+            if alpha >= beta:
+                break  # beta cutoff: o would never let x reach this node
+        strategy_dict_x[history_key] = {str(a): (1 if a == best_action else 0) for a in range(9)}
+        return best_value
+    else:
+        # Minimizer (o)
+        best_value = math.inf
+        for action in valid_actions:
+            child = history_obj.update_history(action)
+            value = backward_induction(child, alpha, beta)
+            if value < best_value:
+                best_value = value
+                best_action = action
+            beta = min(beta, best_value)
+            if alpha >= beta:
+                break  # alpha cutoff: x would never let o reach this node
+        strategy_dict_o[history_key] = {str(a): (1 if a == best_action else 0) for a in range(9)}
+        return best_value
 
 
 def solve_tictactoe():
