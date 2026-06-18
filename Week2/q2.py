@@ -5,57 +5,26 @@ import logging
 logging.basicConfig(format='%(levelname)s - %(asctime)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S',
                     level=logging.INFO)
 
-# Global variable to keep track of visited board positions. This is a dictionary with keys as self.boards as str and
-# value represents the maxmin value. Use the get_boards_str function in History class to get the key corresponding to
-# self.boards.
 board_positions_val_dict = {}
-# Global variable to store the visited histories in the process of alpha beta pruning.
 visited_histories_list = []
+
+# The 8 symmetries (dihedral group D4) of a 3x3 board, written as index
+# permutations: applying transform g maps the value at position i to g[i].
+# Used to avoid re-exploring moves that are equivalent under board symmetry.
+_D4 = (
+    (0, 1, 2, 3, 4, 5, 6, 7, 8),   # identity
+    (6, 3, 0, 7, 4, 1, 8, 5, 2),   # rotate 90
+    (8, 7, 6, 5, 4, 3, 2, 1, 0),   # rotate 180
+    (2, 5, 8, 1, 4, 7, 0, 3, 6),   # rotate 270
+    (2, 1, 0, 5, 4, 3, 8, 7, 6),   # reflect left-right
+    (6, 7, 8, 3, 4, 5, 0, 1, 2),   # reflect up-down
+    (0, 3, 6, 1, 4, 7, 2, 5, 8),   # transpose
+    (8, 5, 2, 7, 4, 1, 6, 3, 0),   # anti-transpose
+)
 
 
 class History:
     def __init__(self, num_boards=2, history=None):
-        """
-        # self.history : Eg: [0, 4, 2, 5]
-            keeps track of sequence of actions played since the beginning of the game.
-            Each action is an integer between 0-(9n-1) representing the square in which the move will be played as shown
-            below (n=2 is the number of boards).
-
-             Board 1
-              ___ ___ ____
-             |_0_|_1_|_2_|
-             |_3_|_4_|_5_|
-             |_6_|_7_|_8_|
-
-             Board 2
-              ____ ____ ____
-             |_9_|_10_|_11_|
-             |_12_|_13_|_14_|
-             |_15_|_16_|_17_|
-
-        # self.boards
-            empty squares are represented using '0' and occupied squares are 'x'.
-            Eg: [['x', '0', 'x', '0', 'x', 'x', '0', '0', '0'], ['0', 0', '0', 0', '0', 0', '0', 0', '0']]
-            for two board game
-
-            Board 1
-              ___ ___ ____
-             |_x_|___|_x_|
-             |___|_x_|_x_|
-             |___|___|___|
-
-            Board 2
-              ___ ___ ____
-             |___|___|___|
-             |___|___|___|
-             |___|___|___|
-
-        # self.player: 1 or 2
-            Player whose turn it is at the current history/board
-
-        :param num_boards: Number of boards in the game of Notakto.
-        :param history: list keeps track of sequence of actions played since the beginning of the game.
-        """
         self.num_boards = num_boards
         if history is not None:
             self.history = history
@@ -64,31 +33,11 @@ class History:
             self.history = []
             self.boards = []
             for i in range(self.num_boards):
-                # empty boards
                 self.boards.append(['0', '0', '0', '0', '0', '0', '0', '0', '0'])
-        # Maintain a list to keep track of active boards
         self.active_board_stats = self.check_active_boards()
         self.current_player = self.get_current_player()
 
     def get_boards(self):
-        """ Play out the current self.history and get the boards corresponding to the history.
-
-        :return: list of lists
-                Eg: [['x', '0', 'x', '0', 'x', 'x', '0', '0', '0'], ['0', 0', '0', 0', '0', 0', '0', 0', '0']]
-                for two board game
-
-                Board 1
-                  ___ ___ ____
-                 |_x_|___|_x_|
-                 |___|_x_|_x_|
-                 |___|___|___|
-
-                Board 2
-                  ___ ___ ____
-                 |___|___|___|
-                 |___|___|___|
-                 |___|___|___|
-        """
         boards = []
         for i in range(self.num_boards):
             boards.append(['0', '0', '0', '0', '0', '0', '0', '0', '0'])
@@ -99,24 +48,6 @@ class History:
         return boards
 
     def check_active_boards(self):
-        """ Return a list to keep track of active boards
-
-        :return: list of int (zeros and ones)
-                Eg: [0, 1]
-                for two board game
-
-                Board 1
-                  ___ ___ ____
-                 |_x_|_x_|_x_|
-                 |___|_x_|_x_|
-                 |___|___|___|
-
-                Board 2
-                  ___ ___ ____
-                 |___|___|___|
-                 |___|___|___|
-                 |___|___|___|
-        """
         active_board_stat = []
         for i in range(self.num_boards):
             if self.is_board_win(self.boards[i]):
@@ -130,22 +61,15 @@ class History:
         for i in range(3):
             if board[3 * i] == board[3 * i + 1] == board[3 * i + 2] != '0':
                 return True
-
             if board[i] == board[i + 3] == board[i + 6] != '0':
                 return True
-
         if board[0] == board[4] == board[8] != '0':
             return True
-
         if board[2] == board[4] == board[6] != '0':
             return True
         return False
 
     def get_current_player(self):
-        """
-        Get player whose turn it is at the current history/board
-        :return: 1 or 2
-        """
         total_num_moves = len(self.history)
         if total_num_moves % 2 == 0:
             return 1
@@ -158,57 +82,129 @@ class History:
             boards_str = boards_str + ''.join([str(j) for j in self.boards[i]])
         return boards_str
 
+    # ------------------------------------------------------------------ #
+    #  Completed helper methods                                          #
+    # ------------------------------------------------------------------ #
     def is_win(self):
-        # Feel free to implement this in anyway if needed
-        pass
+        """The game is decided (terminal) iff every board is dead, i.e. no
+        board is still active. Returns True in that case."""
+        for stat in self.active_board_stats:
+            if stat == 1:
+                return False
+        return True
 
     def get_valid_actions(self):
-        # Feel free to implement this in anyway if needed
-        pass
+        """Legal moves: place an 'X' on an EMPTY square of an ACTIVE board.
+
+        Two value-preserving symmetry reductions are applied so the search
+        stays tractable (the 'specific move order' for more pruning / less
+        memory):
+
+          1. Identical boards are interchangeable, so among boards with the
+             same configuration only the first is expanded.
+          2. Within a board, empty squares that are equivalent under that
+             board's own symmetry group (its stabiliser in D4) lead to
+             identical sub-games, so only one representative is kept.
+
+        Actions are returned in increasing index order, which also fills a
+        board before moving to the next one -> good alpha-beta ordering.
+        """
+        valid_actions = []
+        seen_boards = set()
+        for board_num in range(self.num_boards):
+            if self.active_board_stats[board_num] != 1:
+                continue
+            board = self.boards[board_num]
+            cfg = ''.join(board)
+            if cfg in seen_boards:          # reduction 1: duplicate board
+                continue
+            seen_boards.add(cfg)
+            # stabiliser: the symmetries that leave THIS board unchanged
+            stab = [g for g in _D4 if all(board[g[i]] == board[i] for i in range(9))]
+            reps = set()
+            for pos in range(9):
+                if board[pos] != '0':
+                    continue
+                orbit_rep = min(g[pos] for g in stab)   # reduction 2
+                if orbit_rep in reps:
+                    continue
+                reps.add(orbit_rep)
+                valid_actions.append(9 * board_num + pos)
+        return valid_actions
 
     def is_terminal_history(self):
-        # Feel free to implement this in anyway if needed
-        pass
+        """Terminal when all boards are dead (no active board remains)."""
+        return self.is_win()
 
     def get_value_given_terminal_history(self):
-        # Feel free to implement this in anyway if needed
-        pass
+        """At a terminal history the player who JUST moved completed the last
+        three-in-a-row and therefore loses; the player to move is the winner.
+        Player 1 is the maximiser, so the value (utility for player 1) is +1
+        if it is player 1's turn at the terminal node, else -1."""
+        if self.current_player == 1:
+            return 1
+        else:
+            return -1
 
 
 def alpha_beta_pruning(history_obj, alpha, beta, max_player_flag):
-    """
-        Calculate the maxmin value given a History object using alpha beta pruning. Use the specific move order to
-        speedup (more pruning, less memory).
-
-    :param history_obj: History class object
-    :param alpha: -math.inf
-    :param beta: math.inf
-    :param max_player_flag: Bool (True if maximizing player plays)
-    :return: float
-    """
-    # These two already given lines track the visited histories.
+    """Maxmin value of the game via alpha-beta pruning."""
     global visited_histories_list
     visited_histories_list.append(history_obj.history)
-    # TODO implement
-    return -2
-    # TODO implement
+
+    if history_obj.is_terminal_history():
+        return history_obj.get_value_given_terminal_history()
+
+    if max_player_flag:
+        value = -math.inf
+        for action in history_obj.get_valid_actions():
+            child = History(num_boards=history_obj.num_boards,
+                            history=history_obj.history + [action])
+            value = max(value, alpha_beta_pruning(child, alpha, beta, False))
+            alpha = max(alpha, value)
+            if alpha >= beta:               # beta cut-off
+                break
+        return value
+    else:
+        value = math.inf
+        for action in history_obj.get_valid_actions():
+            child = History(num_boards=history_obj.num_boards,
+                            history=history_obj.history + [action])
+            value = min(value, alpha_beta_pruning(child, alpha, beta, True))
+            beta = min(beta, value)
+            if alpha >= beta:               # alpha cut-off
+                break
+        return value
 
 
 def maxmin(history_obj, max_player_flag):
-    """
-        Calculate the maxmin value given a History object using maxmin rule. Store the value of already visited
-        board positions to speed up, avoiding recursive calls for a different history with the same board position.
-    :param history_obj: History class object
-    :param max_player_flag: True if the player is maximizing player
-    :return: float
-    """
-    # Global variable to keep track of visited board positions. This is a dictionary with keys as str version of
-    # self.boards and value represents the maxmin value. Use the get_boards_str function in History class to get
-    # the key corresponding to self.boards.
+    """Maxmin value with memoisation over board positions. Because the number
+    of X's in a position fixes whose turn it is, the board string alone is a
+    sound memo key."""
     global board_positions_val_dict
-    # TODO implement
-    return -2
-    # TODO implement
+
+    if history_obj.is_terminal_history():
+        return history_obj.get_value_given_terminal_history()
+
+    key = history_obj.get_boards_str()
+    if key in board_positions_val_dict:
+        return board_positions_val_dict[key]
+
+    if max_player_flag:
+        value = -math.inf
+        for action in history_obj.get_valid_actions():
+            child = History(num_boards=history_obj.num_boards,
+                            history=history_obj.history + [action])
+            value = max(value, maxmin(child, False))
+    else:
+        value = math.inf
+        for action in history_obj.get_valid_actions():
+            child = History(num_boards=history_obj.num_boards,
+                            history=history_obj.history + [action])
+            value = min(value, maxmin(child, True))
+
+    board_positions_val_dict[key] = value
+    return value
 
 
 def solve_alpha_beta_pruning(history_obj, alpha, beta, max_player_flag):
